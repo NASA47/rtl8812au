@@ -17,6 +17,8 @@
 #include <drv_types.h>
 #include <hal_data.h>
 
+#define RFMETRICS 1
+
 #if defined(PLATFORM_LINUX) && defined (PLATFORM_WINDOWS)
 
 	#error "Shall be Linux or Windows, but not both!\n"
@@ -3683,7 +3685,11 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 			(1<<IEEE80211_RADIOTAP_RADIOTAP_NAMESPACE);
 		if(pHalData->NumTotalRFPath>1) {
 			tmp_32bit = (1<<IEEE80211_RADIOTAP_ANTENNA) |
-				(1<<IEEE80211_RADIOTAP_DBM_ANTSIGNAL) |
+                              (1<<IEEE80211_RADIOTAP_DBM_ANTSIGNAL) |
+#if RFMETRICS
+				(1<<IEEE80211_RADIOTAP_DBM_ANTNOISE)  |
+				(1<<IEEE80211_RADIOTAP_LOCK_QUALITY)  |
+#endif
 				(1<<IEEE80211_RADIOTAP_EXT) |
 				(1<<IEEE80211_RADIOTAP_RADIOTAP_NAMESPACE);
 			for(i=0; i<pHalData->NumTotalRFPath-1; i++) {
@@ -3692,7 +3698,13 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 			}
 		}
 		tmp_32bit = (1<<IEEE80211_RADIOTAP_ANTENNA) |
-			(1<<IEEE80211_RADIOTAP_DBM_ANTSIGNAL);
+			(1<<IEEE80211_RADIOTAP_DBM_ANTSIGNAL)
+#if RFMETRICS
+                                                            |
+			(1<<IEEE80211_RADIOTAP_DBM_ANTNOISE)|
+			(1<<IEEE80211_RADIOTAP_LOCK_QUALITY)
+#endif
+                        ;
 #ifdef CONFIG_RADIOTAP_WITH_RXDESC
 		tmp_32bit |= (1 << IEEE80211_RADIOTAP_VENDOR_NAMESPACE);
 #endif
@@ -3760,8 +3772,7 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 	/* channel */
 	tmp_16bit = 0;
 	rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_CHANNEL);
-	tmp_16bit = CHAN2FREQ(rtw_get_oper_ch(padapter));
-	/*tmp_16bit = CHAN2FREQ(pHalData->current_channel);*/
+	tmp_16bit = cpu_to_le16(CHAN2FREQ(rtw_get_oper_ch(padapter)));
 	memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
 	rt_len += 2;
 
@@ -3780,47 +3791,17 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 			/* OFDM */
 			tmp_16bit |= cpu_to_le16(IEEE80211_CHAN_OFDM);
 		}
-	} else
+	} else  {
 		tmp_16bit |= cpu_to_le16(IEEE80211_CHAN_DYN);
+        }
+
 	memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
 	rt_len += 2;
 
-	if(pattrib->physt) {
-		/* dBm Antenna Signal */
-		rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL);
-		hdr_buf[rt_len] = pattrib->phy_info.recv_signal_power;
-		rt_len += 1;
-
-#if 0
-	/* dBm Antenna Noise */
-	rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_DBM_ANTNOISE);
-	hdr_buf[rt_len] = 0;
-	rt_len += 1;
-#endif
-
-		rt_len++;	// alignment
-	}
-
-	/* Signal Quality */
-	rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_LOCK_QUALITY);
-	tmp_16bit = cpu_to_le16(pattrib->phy_info.signal_quality);
-	memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
-	rt_len += 2;
-#if 0
-	/* Antenna */
-	rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_ANTENNA);
-	hdr_buf[rt_len] = pHalData->rf_type;
-	rt_len += 1;
-
-	rt_len++;	// alignment
-#endif
 	/* RX flags */
 	rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_RX_FLAGS);
-#if 0
-	tmp_16bit = cpu_to_le16(0);
-	memcpy(ptr, &tmp_16bit, 1);
-#endif
-	rt_len += 2;
+        rt_len += 2;
+
 
 	/* MCS information */
 	if (pattrib->data_rate >= 12 && pattrib->data_rate < 44) {
@@ -3921,8 +3902,21 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 
 	if (pattrib->physt) {
 		for(i=0; i<pHalData->NumTotalRFPath; i++) {
+                        //  IEEE80211_RADIOTAP_DBM_ANTSIGNAL
 			hdr_buf[rt_len] = pattrib->phy_info.rx_pwr[i];
 			rt_len ++;
+#if RFMETRICS
+                        //  IEEE80211_RADIOTAP_DBM_ANTNOISE
+			hdr_buf[rt_len] = pattrib->phy_info.rx_pwr[i] - pattrib->phy_info.rx_snr[i];
+			rt_len ++;
+			// alignment for the following u16 short
+			rt_len ++;	// alignment
+                        //  IEEE80211_RADIOTAP_LOCK_QUALITY
+			tmp_16bit = cpu_to_le16(pattrib->phy_info.rx_mimo_signal_quality[i]);
+			memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
+			rt_len += 2;
+#endif
+                        //  IEEE80211_RADIOTAP_ANTENNA
 			hdr_buf[rt_len] = i;
 			rt_len ++;
 		}
