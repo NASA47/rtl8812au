@@ -3649,6 +3649,7 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 
 	HAL_DATA_TYPE *pHalData = GET_HAL_DATA(padapter);
 
+        u8 tmp_8bit = 0;
 	u16 tmp_16bit = 0;
 
 	static u8 data_rate[] = {
@@ -3667,11 +3668,7 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 	struct ieee80211_radiotap_header *rtap_hdr = NULL;
 	u8 *ptr = NULL;
 
-#ifdef CONFIG_RADIOTAP_WITH_RXDESC
 	u8 hdr_buf[128] = {0};
-#else
-	u8 hdr_buf[64] = {0};
-#endif
 	u16 rt_len = 8;
 	u32 tmp_32bit;
 	int i;
@@ -3767,7 +3764,9 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 			hdr_buf[rt_len] = data_rate[pattrib->data_rate];
 		}
 	}
-	rt_len += 1; /* force padding 1 byte for aligned */
+
+        if (!IS_ALIGNED(rt_len, 2))
+            rt_len++;
 
 	/* channel */
 	tmp_16bit = 0;
@@ -3828,77 +3827,89 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
 		rt_len += 1;
 	}
 
-	/* VHT */
-	if (pattrib->data_rate >= 44 && pattrib->data_rate < 84) {
-		rtap_hdr->it_present |= (1 << IEEE80211_RADIOTAP_VHT);
+        /* VHT, Required Alignment: 2 bytes */
+        if (pattrib->data_rate >= DESC_RATEVHTSS1MCS0 && pattrib->data_rate <= DESC_RATEVHTSS4MCS9) {
+                rtap_hdr->it_present |= BIT(IEEE80211_RADIOTAP_VHT);
 
-		/* known 16 bit, flag 8 bit */
-		tmp_16bit = 0;
+                if (!IS_ALIGNED(rt_len, 2))
+                    rt_len++;
 
-		/* Bandwidth */
-		tmp_16bit |= BIT6;
+                /* Structure
+                   u16 known, u8 flags, u8 bandwidth, u8 mcs_nss[4],
+                   u8 coding, u8 group_id, u16 partial_aid */
 
-		/* Group ID */
-		tmp_16bit |= BIT7;
+                tmp_16bit = 0;
 
-		/* Partial AID */
-		tmp_16bit |= BIT8;
+                /* STBC */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_STBC);
+                hdr_buf[rt_len + 2] |= (pattrib->stbc & 0x01);
 
-		/* STBC */
-		tmp_16bit |= BIT0;
-		hdr_buf[rt_len + 2] |= (pattrib->stbc & 0x01);
 
-		/* Guard interval */
-		tmp_16bit |= BIT2;
-		hdr_buf[rt_len + 2] |= (pattrib->sgi & 0x01) << 2;
+                /* Guard interval */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_GI);
+                hdr_buf[rt_len + 2] |= ((pattrib->sgi & 0x01) << 2);
 
-		/* LDPC extra OFDM symbol */
-		tmp_16bit |= BIT4;
-		hdr_buf[rt_len + 2] |= (pattrib->ldpc & 0x01) << 4;
+                /* LDPC extra OFDM symbol */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_LDPC_EXTRA_OFDM_SYM);
+                hdr_buf[rt_len + 2] |= ((pattrib->ldpc & 0x01) << 4);
 
-		memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
-		rt_len += 3;
+                /* know.Bandwidth */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_BANDWIDTH);
 
-		/* bandwidth */
-		if (pattrib->bw == 0)
-			hdr_buf[rt_len] |= 0;
-		else if (pattrib->bw == 1)
-			hdr_buf[rt_len] |= 1;
-		else if (pattrib->bw == 2)
-			hdr_buf[rt_len] |= 4;
-		else if (pattrib->bw == 3)
-			hdr_buf[rt_len] |= 11;
-		rt_len += 1;
+                /* Group ID */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_GROUP_ID);
 
-		/* mcs_nss */
-		if (pattrib->data_rate >= 44 && pattrib->data_rate < 54) {
-			hdr_buf[rt_len] |= 1;
-			hdr_buf[rt_len] |= data_rate[pattrib->data_rate] << 4;
-		} else if (pattrib->data_rate >= 54 && pattrib->data_rate < 64) {
-			hdr_buf[rt_len + 1] |= 2;
-			hdr_buf[rt_len + 1] |= data_rate[pattrib->data_rate] << 4;
-		} else if (pattrib->data_rate >= 64 && pattrib->data_rate < 74) {
-			hdr_buf[rt_len + 2] |= 3;
-			hdr_buf[rt_len + 2] |= data_rate[pattrib->data_rate] << 4;
-		} else if (pattrib->data_rate >= 74 && pattrib->data_rate < 84) {
-			hdr_buf[rt_len + 3] |= 4;
-			hdr_buf[rt_len + 3] |= data_rate[pattrib->data_rate] << 4;
-		}
-		rt_len += 4;
+                /* Partial AID */
+                tmp_16bit |= cpu_to_le16(IEEE80211_RADIOTAP_VHT_KNOWN_PARTIAL_AID);
 
-		/* coding */
-		hdr_buf[rt_len] = 0;
-		rt_len += 1;
+                _rtw_memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
+                rt_len += 3;
 
-		/* group_id */
-		hdr_buf[rt_len] = 0;
-		rt_len += 1;
+                /* u8 bandwidth */
+                tmp_8bit = pattrib->bw;
 
-		/* partial_aid */
-		tmp_16bit = 0;
-		memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
-		rt_len += 2;
-	}
+                switch (tmp_8bit) {
+                case CHANNEL_WIDTH_20:
+                        hdr_buf[rt_len] |= 0;
+                        break;
+                case CHANNEL_WIDTH_40:
+                        hdr_buf[rt_len] |= 1;
+                        break;
+                case CHANNEL_WIDTH_80:
+                        hdr_buf[rt_len] |= 4;
+                        break;
+                case CHANNEL_WIDTH_160:
+                        hdr_buf[rt_len] |= 11;
+                        break;
+                default:
+                        hdr_buf[rt_len] |= 0;
+                }
+                rt_len += 1;
+
+                /* u8 mcs_nss[4] */
+                if ((DESC_RATEVHTSS1MCS0 <= pattrib->data_rate) &&
+                        (pattrib->data_rate <= DESC_RATEVHTSS4MCS9)) {
+                        /* User 0 */
+                        /* MCS */
+                        hdr_buf[rt_len] = ((pattrib->data_rate - DESC_RATEVHTSS1MCS0) % 10) << 4;
+                        /* NSS */
+                        hdr_buf[rt_len] |= (((pattrib->data_rate - DESC_RATEVHTSS1MCS0) / 10) + 1);
+                }
+                rt_len += 4;
+
+                /* u8 coding, phystat? */
+                hdr_buf[rt_len] = 0;
+                rt_len += 1;
+
+                /* u8 group_id */
+                hdr_buf[rt_len] = 0;
+                rt_len += 1;
+
+                /* u16 partial_aid */
+                tmp_16bit = 0;
+                _rtw_memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
+                rt_len += 2;
+        }
 
 	if (pattrib->physt) {
 		for(i=0; i<pHalData->NumTotalRFPath; i++) {
@@ -3909,8 +3920,11 @@ static sint fill_radiotap_hdr(_adapter *padapter, union recv_frame *precvframe)
                         //  IEEE80211_RADIOTAP_DBM_ANTNOISE
 			hdr_buf[rt_len] = pattrib->phy_info.rx_pwr[i] - pattrib->phy_info.rx_snr[i];
 			rt_len ++;
-			// alignment for the following u16 short
-			rt_len ++;	// alignment
+
+                        /* Signal Quality */
+			if (!IS_ALIGNED(rt_len, 2))
+				rt_len++;
+
                         //  IEEE80211_RADIOTAP_LOCK_QUALITY
 			tmp_16bit = cpu_to_le16(pattrib->phy_info.rx_mimo_signal_quality[i]);
 			memcpy(&hdr_buf[rt_len], &tmp_16bit, 2);
