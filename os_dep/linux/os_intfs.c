@@ -262,9 +262,9 @@ int rtw_low_power = 0;
 #endif
 
 #ifdef CONFIG_DISABLE_CHANNEL_ONE
-	int rtw_special_rf_path = 1;
+	int rtw_special_rf_path = 1; /* 0: 2T2R ,1: only turn on path A 1T1R */
 #else
-	int rtw_special_rf_path = 0; /* 0: 2T2R ,1: only turn on path A 1T1R */
+	int rtw_special_rf_path = 0;
 #endif
 
 char rtw_country_unspecified[] = {0xFF, 0xFF, 0x00};
@@ -310,8 +310,8 @@ int rtw_antdiv_cfg = 0; /* 0:OFF , 1:ON, 2:decide by Efuse config */
 int rtw_antdiv_type = 3
 	; /* 0:decide by efuse  1: for 88EE, 1Tx and 1RxCG are diversity.(2 Ant with SPDT), 2:  for 88EE, 1Tx and 2Rx are diversity.( 2 Ant, Tx and RxCG are both on aux port, RxCS is on main port ), 3: for 88EE, 1Tx and 1RxCG are fixed.(1Ant, Tx and RxCG are both on aux port) */
 #else
-int rtw_antdiv_cfg = 2; /* 0:OFF , 1:ON, 2:decide by Efuse config */
-int rtw_antdiv_type = 0
+int rtw_antdiv_cfg = 2;
+int rtw_antdiv_type = 0;
 #endif
 
 int rtw_drv_ant_band_switch = 1; /* 0:OFF , 1:ON, Driver control antenna band switch*/
