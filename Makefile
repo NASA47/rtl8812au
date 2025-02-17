@@ -96,6 +96,7 @@ CONFIG_LED_CONTROL = y
 CONFIG_LED_ENABLE = y
 CONFIG_USB2_EXTERNAL_POWER = y
 CONFIG_DISABLE_CHANNEL_ONE = y
+CONFIG_DISABLE_CCA = y
 ########################## Debug ###########################
 CONFIG_RTW_DEBUG = n
 # default log level is _DRV_INFO_ = 4,
@@ -236,6 +237,14 @@ endif
 
 ifeq ($(CONFIG_USB2_EXTERNAL_POWER), y)
 EXTRA_CFLAGS += -DCONFIG_USE_EXTERNAL_POWER
+endif
+
+ifeq ($(CONFIG_DISABLE_CHANNEL_ONE), y)
+EXTRA_CFLAGS += -DCONFIG_DISABLE_CHANNEL_ONE
+endif
+
+ifeq ($(CONFIG_DISABLE_CCA), y)
+EXTRA_CFLAGS += -DCONFIG_DISABLE_CCA
 endif
 
 _OS_INTFS_FILES :=	os_dep/osdep_service.o \
