@@ -30,6 +30,10 @@ rm ${INST_DRV_DIR}/${MOD_NAME}.zst
 zstd ${INST_DRV_DIR}/${MOD_NAME}
 rm ${INST_DRV_DIR}/${MOD_NAME}
 
+#Add driver dependency
+echo "88XXau_wfb" >> /etc/modules
+depmod
+
 echo "Finished running dkms install steps."
 
 
