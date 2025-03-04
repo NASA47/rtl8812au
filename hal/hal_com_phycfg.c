@@ -39,6 +39,14 @@
 #define PG_TXPWR_SRC_DEF		2
 #define PG_TXPWR_SRC_NUM		3
 
+#ifdef CONFIG_DISABLE_CHANNEL_ONE
+    const char _config_disable_channel_one[] = "CONFIG_DISABLE_CHANNEL_ONE";
+#endif
+
+#ifdef CONFIG_DISABLE_CCA
+    const char _config_disable_cca[] = "CONFIG_DISABLE_CCA";
+#endif
+
 const char *const _pg_txpwr_src_str[] = {
 	"PG_DATA",
 	"IC_DEF",
